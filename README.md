@@ -62,7 +62,10 @@ kubectl exec -n $VAULT_K8S_NAMESPACE vault-0 -- vault operator unseal $VAULT_UNS
 
 kubectl exec -n $VAULT_K8S_NAMESPACE -it vault-1 -- /bin/sh
 
-vault operator raft join -address=https://vault-1.vault-internal:8200 -leader-ca-cert="$(cat /vault/userconfig/vault-ha-tls/vault.ca)" -leader-client-cert="$(cat /vault/userconfig/vault-ha-tls/vault.crt)" -leader-client-key="$(cat /vault/userconfig/vault-ha-tls/vault.key)" https://vault-0.vault-internal:8200
+vault operator raft join -address=https://vault-1.vault-internal:8200 
+-leader-ca-cert="$(cat /vault/userconfig/vault-ha-tls/vault.ca)" 
+-leader-client-cert="$(cat /vault/userconfig/vault-ha-tls/vault.crt)" 
+-leader-client-key="$(cat /vault/userconfig/vault-ha-tls/vault.key)" https://vault-0.vault-internal:8200
 
 exit
 
@@ -72,7 +75,10 @@ kubectl exec -n $VAULT_K8S_NAMESPACE -ti vault-1 -- vault operator unseal $VAULT
 
 kubectl exec -n $VAULT_K8S_NAMESPACE -it vault-2 -- /bin/sh
 
-vault operator raft join -address=https://vault-2.vault-internal:8200 -leader-ca-cert="$(cat /vault/userconfig/vault-ha-tls/vault.ca)" -leader-client-cert="$(cat /vault/userconfig/vault-ha-tls/vault.crt)" -leader-client-key="$(cat /vault/userconfig/vault-ha-tls/vault.key)" https://vault-0.vault-internal:8200
+vault operator raft join -address=https://vault-2.vault-internal:8200 
+-leader-ca-cert="$(cat /vault/userconfig/vault-ha-tls/vault.ca)" 
+-leader-client-cert="$(cat /vault/userconfig/vault-ha-tls/vault.crt)" 
+-leader-client-key="$(cat /vault/userconfig/vault-ha-tls/vault.key)" https://vault-0.vault-internal:8200
 
 exit
 
