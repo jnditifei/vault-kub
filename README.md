@@ -15,7 +15,24 @@ openssl req -new -key ${WORKDIR}/vault.key -out ${WORKDIR}/vault.csr -config ${W
 
 ### Issue the Certificate.
 
+cat > ${WORKDIR}/csr.yaml <<EOF
+apiVersion: certificates.k8s.io/v1
+kind: CertificateSigningRequest
+metadata:
+   name: vault.svc
+spec:
+   signerName: kubernetes.io/kubelet-serving
+   expirationSeconds: 8640000
+   request: $(cat ${WORKDIR}/vault.csr|base64|tr -d '\n')
+   usages:
+   - digital signature
+   - key encipherment
+   - server auth
+EOF
+
+
 kubectl create -f ${WORKDIR}/csr.yaml
+
 kubectl certificate approve vault.svc
 
 kubectl get csr vault.svc -o jsonpath='{.status.certificate}' | openssl base64 -d -A -out ${WORKDIR}/vault.crt
@@ -42,6 +59,7 @@ kubectl create secret generic vault-ha-tls \
 ### Deploy the Cluster
 
 helm install vault hashicorp/vault --namespace vault -f values.yaml
+
 kubectl -n $VAULT_K8S_NAMESPACE get pods
 
 ### Initialize vault-0 with one key share and one key threshold
@@ -54,6 +72,7 @@ kubectl exec -n $VAULT_K8S_NAMESPACE vault-0 -- vault operator init \
 ### Unseal Vault running on the vault-0 pod.
 
 VAULT_UNSEAL_KEY=$(jq -r ".unseal_keys_b64[]" ${WORKDIR}/cluster-keys.json)
+
 kubectl exec -n $VAULT_K8S_NAMESPACE vault-0 -- vault operator unseal $VAULT_UNSEAL_KEY
 
 ## Join vault-1 & vault-2 pods to the Raft cluster
@@ -87,6 +106,7 @@ kubectl exec -n $VAULT_K8S_NAMESPACE -ti vault-2 -- vault operator unseal $VAULT
 ## Login to vault-0 with the root token
 
 export CLUSTER_ROOT_TOKEN=$(cat ${WORKDIR}/cluster-keys.json | jq -r ".root_token")
+
 kubectl exec -n $VAULT_K8S_NAMESPACE vault-0 -- vault login $CLUSTER_ROOT_TOKEN
 
 ## port forward the vault service
@@ -96,4 +116,5 @@ kubectl -n vault port-forward service/vault 8200:8200
 ## Destroy resources & namespace
 
 kubectl delete all --all -n vault
+
 kubectl delete namespace  vault
