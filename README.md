@@ -129,3 +129,22 @@ kubectl delete all --all -n vault
 
 kubectl delete namespace  vault
 ```
+
+###  How to fix Vault Agent Injector TLS handshake errors
+```
+kubectl logs -n vault deploy/vault-agent-injector
+```
+```
+#This error is display
+http: TLS handshake error from 10.42.0.1:42136: remote error: tls: bad certificate
+```
+```
+helm upgrade vault hashicorp/vault \
+  --namespace vault \
+  --reuse-values \
+  --set injector.enabled=true \
+  --set injector.tls.generate=true
+```
+```
+kubectl delete pod -n vault -l app.kubernetes.io/name=vault-agent-injector
+```
