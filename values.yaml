@@ -9,7 +9,6 @@ injector:
   image:
     repository: "hashicorp/vault-k8s"
     tag: "latest"
-
   resources:
     requests:
       memory: 256Mi
@@ -17,6 +16,17 @@ injector:
     limits:
       memory: 256Mi
       cpu: 250m
+  extraEnvironmentVars:
+    VAULT_CACERT: /vault/userconfig/vault-ha-tls/vault.ca
+  volumes:
+    - name: userconfig-vault-ha-tls
+      secret:
+        defaultMode: 420
+        secretName: vault-ha-tls
+  volumeMounts:
+    - mountPath: /vault/userconfig/vault-ha-tls
+      name: userconfig-vault-ha-tls
+      readOnly: true
 
 server:
   # These Resource Limits are in line with node requirements in the
@@ -28,7 +38,6 @@ server:
     limits:
       memory: 256Mi
       cpu: 500m
-
   # For HA configuration and because we need to manually init the vault,
   # we need to define custom readiness/liveness Probe settings
   readinessProbe:
@@ -39,51 +48,45 @@ server:
     path: "/v1/sys/health?standbyok=true"
     initialDelaySeconds: 60
 
-  # extraEnvironmentVars is a list of extra environment variables to set with the stateful set. These could be
-  # used to include variables required for auto-unseal.
-global:
-   enabled: true
-   tlsDisable: false
-injector:
-   enabled: true
-server:
-   extraEnvironmentVars:
-      VAULT_CACERT: /vault/userconfig/vault-ha-tls/vault.ca
-      VAULT_TLSCERT: /vault/userconfig/vault-ha-tls/vault.crt
-      VAULT_TLSKEY: /vault/userconfig/vault-ha-tls/vault.key
-   volumes:
-      - name: userconfig-vault-ha-tls
-        secret:
-         defaultMode: 420
-         secretName: vault-ha-tls
-   volumeMounts:
-      - mountPath: /vault/userconfig/vault-ha-tls
-        name: userconfig-vault-ha-tls
-        readOnly: true
-   standalone:
-      enabled: false
-   affinity: ""
-   ha:
+  extraEnvironmentVars:
+    VAULT_CACERT: /vault/userconfig/vault-ha-tls/vault.ca
+    VAULT_TLSCERT: /vault/userconfig/vault-ha-tls/vault.crt
+    VAULT_TLSKEY: /vault/userconfig/vault-ha-tls/vault.key
+
+  volumes:
+    - name: userconfig-vault-ha-tls
+      secret:
+        defaultMode: 420
+        secretName: vault-ha-tls
+  volumeMounts:
+    - mountPath: /vault/userconfig/vault-ha-tls
+      name: userconfig-vault-ha-tls
+      readOnly: true
+
+  standalone:
+    enabled: false
+  affinity: ""
+  ha:
+    enabled: true
+    replicas: 3
+    raft:
       enabled: true
-      replicas: 3
-      raft:
-         enabled: true
-         setNodeId: true
-         config: |
-            cluster_name = "vault-integrated-storage"
-            ui = true
-            listener "tcp" {
-               tls_disable = 0
-               address = "[::]:8200"
-               cluster_address = "[::]:8201"
-               tls_cert_file = "/vault/userconfig/vault-ha-tls/vault.crt"
-               tls_key_file  = "/vault/userconfig/vault-ha-tls/vault.key"
-               tls_client_ca_file = "/vault/userconfig/vault-ha-tls/vault.ca"
-            }
-            storage "raft" {
-               path = "/vault/data"
-            }
-            service_registration "kubernetes" {}
+      setNodeId: true
+      config: |
+        cluster_name = "vault-integrated-storage"
+        ui = true
+        listener "tcp" {
+          tls_disable = 0
+          address = "[::]:8200"
+          cluster_address = "[::]:8201"
+          tls_cert_file = "/vault/userconfig/vault-ha-tls/vault.crt"
+          tls_key_file  = "/vault/userconfig/vault-ha-tls/vault.key"
+          tls_client_ca_file = "/vault/userconfig/vault-ha-tls/vault.ca"
+        }
+        storage "raft" {
+          path = "/vault/data"
+        }
+        service_registration "kubernetes" {}
 # Vault UI
 ui:
   enabled: true
