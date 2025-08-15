@@ -9,15 +9,17 @@ export K8S_CLUSTER_NAME="cluster.local" \
 export WORKDIR=.
 ```
 
-### Create the certificate
+### Create the certificate and Certificate Signing Request
 ```
 openssl genrsa -out ${WORKDIR}/vault.key 2048
 
 openssl req -new -key ${WORKDIR}/vault.key -out ${WORKDIR}/vault.csr -config ${WORKDIR}/vault-csr.conf
 ```
-### Issue the Certificate.
+### Issue the Certificate and send it to Kubernetes
+
+#### Create the CSR YAML file.
 ```
-kubectl exec -n $VAULT_K8S_NAMESPACE -ti vault-2 -- vault operator unseal $VAULT_UNSEAL_KEYcat > ${WORKDIR}/csr.yaml <<EOF
+cat > ${WORKDIR}/csr.yaml <<EOF
 apiVersion: certificates.k8s.io/v1
 kind: CertificateSigningRequest
 metadata:
@@ -32,15 +34,21 @@ spec:
    - server auth
 EOF
 ```
-
+#### Send the CSR to Kubernetes
 ```
 kubectl create -f ${WORKDIR}/csr.yaml
-
+```
+#### Approve the CSR in Kubernetes.
+```
 kubectl certificate approve vault.svc
-
+```
+#### Confirm the certificate was issued and retrieve it.
+```
 kubectl get csr vault.svc -o jsonpath='{.status.certificate}' | openssl base64 -d -A -out ${WORKDIR}/vault.crt
 ```
+### Store the certificates and Key in the Kubernetes secrets store.
 
+#### Retrieve Kubernetes CA certificate
 ```
 kubectl config view \
 --raw \
@@ -49,11 +57,11 @@ kubectl config view \
 -o jsonpath='{.clusters[].cluster.certificate-authority-data}' \
 | base64 -d > ${WORKDIR}/vault.ca
 ```
-### Create the Kubernetes namespace
+#### Create the Kubernetes namespace
 ```
 kubectl create namespace $VAULT_K8S_NAMESPACE
 ```
-### Create the TLS secret
+#### Create the TLS secret
 ```
 kubectl create secret generic vault-ha-tls \
 -n $VAULT_K8S_NAMESPACE \
@@ -80,17 +88,14 @@ VAULT_UNSEAL_KEY=$(jq -r ".unseal_keys_b64[]" ${WORKDIR}/cluster-keys.json)
 
 kubectl exec -n $VAULT_K8S_NAMESPACE vault-0 -- vault operator unseal $VAULT_UNSEAL_KEY
 ```
-## Join vault-1 & vault-2 pods to the Raft cluster
+### Join vault-1 & vault-2 pods to the Raft cluster
 
-### Join vault-1 
+#### Join vault-1 
 ```
 kubectl exec -n $VAULT_K8S_NAMESPACE -it vault-1 -- /bin/sh
 ```
 ```
-vault operator raft join -address=https://vault-1.vault-internal:8200 
--leader-ca-cert="$(cat /vault/userconfig/vault-ha-tls/vault.ca)" 
--leader-client-cert="$(cat /vault/userconfig/vault-ha-tls/vault.crt)" 
--leader-client-key="$(cat /vault/userconfig/vault-ha-tls/vault.key)" https://vault-0.vault-internal:8200
+vault operator raft join -address=https://vault-1.vault-internal:8200 -leader-ca-cert="$(cat /vault/userconfig/vault-ha-tls/vault.ca)" -leader-client-cert="$(cat /vault/userconfig/vault-ha-tls/vault.crt)" -leader-client-key="$(cat /vault/userconfig/vault-ha-tls/vault.key)" https://vault-0.vault-internal:8200
 
 exit
 ```
@@ -98,28 +103,25 @@ exit
 ```
 kubectl exec -n $VAULT_K8S_NAMESPACE -ti vault-1 -- vault operator unseal $VAULT_UNSEAL_KEY
 ```
-### Join vault-1
+#### Join vault-2
 ```
 kubectl exec -n $VAULT_K8S_NAMESPACE -it vault-2 -- /bin/sh
 ```
 ```
-vault operator raft join -address=https://vault-2.vault-internal:8200 
--leader-ca-cert="$(cat /vault/userconfig/vault-ha-tls/vault.ca)" 
--leader-client-cert="$(cat /vault/userconfig/vault-ha-tls/vault.crt)" 
--leader-client-key="$(cat /vault/userconfig/vault-ha-tls/vault.key)" https://vault-0.vault-internal:8200
+vault operator raft join -address=https://vault-2.vault-internal:8200 -leader-ca-cert="$(cat /vault/userconfig/vault-ha-tls/vault.ca)" -leader-client-cert="$(cat /vault/userconfig/vault-ha-tls/vault.crt)" -leader-client-key="$(cat /vault/userconfig/vault-ha-tls/vault.key)" https://vault-0.vault-internal:8200
 
 exit
 ```
 ```
 kubectl exec -n $VAULT_K8S_NAMESPACE -ti vault-2 -- vault operator unseal $VAULT_UNSEAL_KEY
 ```
-## Login to vault-0 with the root token
+#### Login to vault-0 with the root token
 ```
 export CLUSTER_ROOT_TOKEN=$(cat ${WORKDIR}/cluster-keys.json | jq -r ".root_token")
 
 kubectl exec -n $VAULT_K8S_NAMESPACE vault-0 -- vault login $CLUSTER_ROOT_TOKEN
 ```
-## port forward the vault service
+#### port forward the vault service
 ```
 kubectl -n vault port-forward service/vault 8200:8200
 ```
